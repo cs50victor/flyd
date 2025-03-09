@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Set more verbose terminal output
+  CARGO_TERM_COLOR: always
+  CARGO_TERM_VERBOSE: true
+  RUST_BACKTRACE: 1
+
+# Cancel old builds on new commit for same workflow + branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci-rs:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust-toolchain:
+          - nightly
+
+    steps:
+      - name: Get source code
+        uses: actions/checkout@v3
+
+      - name: Setup ${{ matrix.rust-toolchain }} rust toolchain with caching
+        uses: brndnmtthws/rust-action@v1
+        with:
+          toolchain: ${{ matrix.rust-toolchain }}
+          components: rustfmt, clippy
+          enable-sccache: "true"
+
+      - name: Build
+        run: cargo build
+
+      - name: Test
+        run: cargo test
+
+      - name: Lint
+        run: cargo fmt --all -- --check
+        # && cargo clippy --verbose -- -D warnings
+
