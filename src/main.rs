@@ -1,5 +1,7 @@
-use actix_web::{get, middleware, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
-use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use actix_web::{
+    App, HttpRequest, HttpResponse, HttpServer, Responder, get, middleware, post, web,
+};
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderValue};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -39,7 +41,11 @@ fn prepare_request(
     };
 
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert(AUTHORIZATION, HeaderValue::from_bytes(auth_header.as_bytes()).map_err(|e|HttpResponse::InternalServerError().body(e.to_string()))?);
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_bytes(auth_header.as_bytes())
+            .map_err(|e| HttpResponse::InternalServerError().body(e.to_string()))?,
+    );
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
     let api_hostname = if use_private {
@@ -74,20 +80,25 @@ async fn create_machine(
         .await
     {
         Ok(response) => response,
-        Err(e) => return HttpResponse::InternalServerError().body(format!("API request failed: {}", e)),
+        Err(e) => {
+            return HttpResponse::InternalServerError().body(format!("API request failed: {}", e));
+        }
     };
-    
+
     let json = match response.json::<serde_json::Value>().await {
         Ok(json) => json,
-        Err(e) => return HttpResponse::InternalServerError().body(format!("Failed to read response body: {}", e)),
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to read response body: {}", e));
+        }
     };
-    
+
     HttpResponse::Ok().json(json)
 }
 
 #[get("/v0/machines/list")]
 async fn list_machines(
-    req: HttpRequest, 
+    req: HttpRequest,
     query: web::Query<ListMachinesRequest>,
     http_client: web::Data<reqwest::Client>,
 ) -> impl Responder {
@@ -95,15 +106,20 @@ async fn list_machines(
         Ok(result) => result,
         Err(response) => return response,
     };
-    
-    let mut url = match reqwest::Url::parse(&format!("{}/v1/apps/{}/machines", api_hostname, query.app_name)) {
+
+    let mut url = match reqwest::Url::parse(&format!(
+        "{}/v1/apps/{}/machines",
+        api_hostname, query.app_name
+    )) {
         Ok(url) => url,
-        Err(e) => return HttpResponse::InternalServerError().body(format!("Failed to parse URL: {}", e)),
+        Err(e) => {
+            return HttpResponse::InternalServerError().body(format!("Failed to parse URL: {}", e));
+        }
     };
-    
+
     {
         let mut query_pairs = url.query_pairs_mut();
-    
+
         if query.include_deleted {
             query_pairs.append_pair("include_deleted", "true");
         }
@@ -114,15 +130,19 @@ async fn list_machines(
 
     let response = match http_client.get(url).headers(headers).send().await {
         Ok(response) => response,
-        Err(e) => return HttpResponse::InternalServerError().body(format!("API request failed: {}", e)),
+        Err(e) => {
+            return HttpResponse::InternalServerError().body(format!("API request failed: {}", e));
+        }
     };
-    
+
     let machines = match response.json::<serde_json::Value>().await {
         Ok(machines) => machines,
-        Err(e) => return HttpResponse::InternalServerError().body(format!("Failed to read response body: {}", e)),
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to read response body: {}", e));
+        }
     };
     HttpResponse::Ok().json(machines)
-    
 }
 
 #[get("/")]
@@ -149,7 +169,7 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("flyd");
 
-    HttpServer::new(move|| {
+    HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(reqwest_client.clone()))
             .wrap(middleware::Logger::new("IP - %a | Time - %D ms"))
